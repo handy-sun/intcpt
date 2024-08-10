@@ -56,16 +56,7 @@ echo "   automake:   $(automake --version | head -1)"
 rm -rf autom4te.cache
 
 set -e
-# po/update-potfiles
-autopoint --force $AP_OPTS 
 
-if ! grep -q datarootdir po/Makefile.in.in; then
-	echo autopoint does not honor dataroot variable, patching.
-	sed -i -e 's/^datadir *=\(.*\)/datarootdir = @datarootdir@\
-datadir = @datadir@/g' po/Makefile.in.in
-fi
-
-# libtoolize
 aclocal -I m4
 autoconf
 autoheader
