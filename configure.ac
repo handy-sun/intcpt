@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.69])
+AC_PREREQ([2.72])
 AC_INIT([intcpt],[0.0.1],[handy-sun@foxmail.com])
 AM_INIT_AUTOMAKE([foreign 1.11 subdir-objects -Wall -Wno-portability])
 
@@ -12,7 +12,6 @@ AC_LANG([C])
 
 AM_SILENT_RULES([yes])
 
-AM_GNU_GETTEXT_VERSION([0.14.1])
 # AM_GNU_GETTEXT([external])
 
 # Checks for programs.
