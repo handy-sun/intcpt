@@ -1,7 +1,6 @@
 #!/bin/sh
 #
-# Helps generate autoconf/automake stuff, when code is checked
-# out from SCM.
+# Helps generate autoconf/automake stuff, when code is checked out from SCM.
 
 SRCDIR=$(dirname ${0})
 test -z "${SRCDIR}" && SRCDIR=.
@@ -35,12 +34,12 @@ test -f autogen.sh || {
 	DIE=1
 }
 
-LTVER=$(libtoolize --version | awk '/^libtoolize/ { print $4 }')
-LTVER=${LTVER:-"none"}
-test ${LTVER##2.} = "${LTVER}" && {
-	echo "You must have libtoolize version >= 2.x.x, but you have ${LTVER}."
-	DIE=1
-}
+# LTVER=$(libtoolize --version | awk '/^libtoolize/ { print $4 }')
+# LTVER=${LTVER:-"none"}
+# test ${LTVER##2.} = "${LTVER}" && {
+# 	echo "You must have libtoolize version >= 2.x.x, but you have ${LTVER}."
+# 	DIE=1
+# }
 
 if test ${DIE} -ne 0; then
 	exit 1
@@ -52,26 +51,28 @@ echo "   aclocal:    $(aclocal --version | head -1)"
 echo "   autoconf:   $(autoconf --version | head -1)"
 echo "   autoheader: $(autoheader --version | head -1)"
 echo "   automake:   $(automake --version | head -1)"
-echo "   libtoolize: $(libtoolize --version | head -1)"
+# echo "   libtoolize: $(libtoolize --version | head -1)"
 
 rm -rf autom4te.cache
 
 set -e
 # po/update-potfiles
-autopoint
-# --force $AP_OPTS
-# if ! grep -q datarootdir po/Makefile.in.in; then
-# 	echo autopoint does not honor dataroot variable, patching.
-# 	sed -i -e 's/^datadir *=\(.*\)/datarootdir = @datarootdir@\
-# datadir = @datadir@/g' po/Makefile.in.in
-# fi
-libtoolize
+autopoint --force $AP_OPTS 
+
+if ! grep -q datarootdir po/Makefile.in.in; then
+	echo autopoint does not honor dataroot variable, patching.
+	sed -i -e 's/^datadir *=\(.*\)/datarootdir = @datarootdir@\
+datadir = @datadir@/g' po/Makefile.in.in
+fi
+
+# libtoolize
 aclocal -I m4
 autoconf
 autoheader
+autoupdate
 
 automake --add-missing
 
 echo
-echo "Now type '${SRCDIR}/configure' and 'make' to compile."
+echo "Now execute '${SRCDIR}/configure' and 'make' to compile."
 

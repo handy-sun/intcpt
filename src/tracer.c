@@ -1,16 +1,18 @@
+#define _POSIX_C_SOURCE 199309L
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/time.h>
-#include <time.h>
 #include <sys/user.h>
 #include <sys/reg.h>
 
@@ -20,17 +22,17 @@
 
 typedef struct pack_total9
 {
-    u_int32_t key;
-    u_int8_t  u8_1;
-    u_int8_t  u8_2;
-    u_int8_t  u8_3;
-    u_int8_t  u8_4;
-    u_int8_t  u8_5;
+    uint32_t key;
+    uint8_t  u8_1;
+    uint8_t  u8_2;
+    uint8_t  u8_3;
+    uint8_t  u8_4;
+    uint8_t  u8_5;
 } __attribute__((packed)) PackTot;
 
 const char *get_tm_timeval()
 {
-    static char s_time_chs[24];
+    static char s_time_chs[84];
     memset(s_time_chs, 0, sizeof(s_time_chs));
     struct timeval tv_cur = {};
     gettimeofday(&tv_cur, NULL);
@@ -89,17 +91,8 @@ int main(int argc, char *argv[]) {
         perror("wait SIGSTOP of ptrace failed");
         return 1;
     }
-/*
-    struct user_regs_struct regs = {};
-    ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-    if (errno != 0) {
-        perror("PTRACE_GETREGS error");
-    } else {
-        printf("regs { rbx: %lld, rcx: %lld, rdx: %lld }\n", regs.rbx, regs.rcx, regs.rdx);
-    }
-*/
 
-    u_int64_t addr = strtoull(argv[2], &end_ptr, 10);
+    uint64_t addr = strtoull(argv[2], &end_ptr, 10);
     long peek_arr[9] = {};
     int i = 0;
     for (; i < sizeof(peek_arr) / sizeof(peek_arr[0]); ++i) {
@@ -119,17 +112,17 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     double elapsed = (end.tv_nsec - start.tv_nsec) / 1000.0;
-    // fprintf(stdout, "end: [%s]\n", get_tm_timeval() + 5);
+    fprintf(stdout, "end: [%s]\n", get_tm_timeval() + 5);
     fprintf(stdout, "elapsed: %02ld_%010.3f,\n", end.tv_sec - start.tv_sec, elapsed);
 
-    u_int8_t *buf = (u_int8_t *)peek_arr;
+    uint8_t *buf = (uint8_t *)peek_arr;
     int off = 0;
     for (; off + sizeof(PackTot) <= sizeof(peek_arr); off += sizeof(PackTot)) {
         PackTot pt = *(PackTot *)(buf + off);
-        fprintf(stdout, "PackTot{ key: %u, u8_1: %u, u8_2: %u, u8_3: %u, u8_4: %u, u8_5: %u }\n",
+        fprintf(stdout, "PackTot{ key: %u, [ %u, %u, %u, %u, %u ] }\n",
                 pt.key, pt.u8_1, pt.u8_2, pt.u8_3, pt.u8_4, pt.u8_5);
     }
 
     return 0;
 }
-/* gcc tracer.c -g -std=c11 -o /usr/local/bin/trc */
+
