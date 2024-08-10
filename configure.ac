@@ -1,7 +1,6 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.72])
 AC_INIT([intcpt],[0.0.1],[handy-sun@foxmail.com])
 AM_INIT_AUTOMAKE([foreign 1.11 subdir-objects -Wall -Wno-portability])
 
