@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 199309L
+/* #define _POSIX_C_SOURCE 199309L */
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,7 +14,6 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/user.h>
-#include <sys/reg.h>
 
 #define LONG_SIZE (sizeof(long))
 
@@ -57,6 +56,86 @@ void handle_signal(int signal) {
     exit(EXIT_SUCCESS);
 }
 
+uint64_t get_base_addr(pid_t pid)
+{
+    const int BUFSIZE = 1024;
+    char buf[1024] = { 0 };
+    char* pro_maps_path = buf;
+
+    // open /proc/pid/maps
+    pro_maps_path += sprintf(pro_maps_path, "%s", "/proc/");
+    pro_maps_path += sprintf(pro_maps_path, "%d", pid);
+    sprintf(pro_maps_path, "/%s", "maps");
+    FILE *fp = fopen(buf, "rb");
+    if (!fp)
+    {
+        perror("open /proc/.. file err");
+        exit(0);
+    }
+
+    // read /proc/pid/exe
+    memset(buf, 0, BUFSIZE);
+    char* pro_exe_path = buf;
+    pro_exe_path += sprintf(pro_exe_path, "%s", "/proc");
+    pro_exe_path += sprintf(pro_exe_path, "/%d", pid);
+    sprintf(pro_exe_path, "/%s", "exe");
+    char target[100] = { 0 };
+    int target_len = readlink(buf, target, 100);
+    /* target[target_len] = 0; */
+    printf("proc exe: %s\n", target);
+
+    char cmd[1024] = { 0 };
+    snprintf(cmd, sizeof(cmd), "objdump -d -j .bss %s | grep -i pcmstate | awk '{print$1}'", target);
+    FILE *pfp = popen(cmd, "r");
+    if (pfp == NULL)
+    {
+        perror(cmd);
+        return 1;
+    }
+    char tempBuff[64]; // save to buf
+    if (fgets(tempBuff, 64, pfp) == NULL)
+    {
+        perror("fgets");
+        pclose(pfp);
+        return 1;
+    }
+    pclose(pfp);
+    uint64_t offset_addr;
+    sscanf(tempBuff, "%lx", &offset_addr);
+    printf("offset_addr: %#lx\n", offset_addr);
+
+    memset(buf, 0, BUFSIZE);
+    char* pro_addr = buf;
+    char* pro_maps = buf + 100;
+    char* pro_name = pro_maps + 100;
+    char* p = pro_name + 256;
+
+    char data[512] = { 0 };
+    while (!feof(fp))
+    {
+        if (fgets(data, sizeof(data), fp) == NULL)
+            return 0;
+
+        sscanf(data, "%[^ ] %[^ ] %[^ ] %[^ ] %[^ ] %[^ ]", pro_addr, p, pro_maps, p, p, pro_name);
+        // printf("pro_addr %s pro_maps %s pro_name %s --> %d %d\n",pro_addr,pro_maps,pro_name,memcmp(pro_name,target,target_len-1),memcmp(pro_maps,"00000000",8));
+        if (memcmp(pro_name, target, target_len - 1) == 0 && memcmp(pro_maps, "00000000", 8) == 0)
+        {
+            fclose(fp);
+            memset(p, 0, 10);
+            sscanf(pro_addr, "%[^-]", p);
+            uint64_t num = 0;
+            sscanf(p, "%lx", &num);
+            return num;
+        }
+        memset(data, 0, sizeof(data));
+    }
+
+    printf("not find addr\n");
+    fclose(fp);
+
+    return 0;
+}
+
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -79,6 +158,9 @@ int main(int argc, char *argv[]) {
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
+
+    uint64_t base = get_base_addr(pid);
+    fprintf(stdout, "base addr: %#lx\n", base);
 
     long intercept = ptrace(PTRACE_ATTACH, pid, NULL, NULL);
     if (0 != intercept) {
