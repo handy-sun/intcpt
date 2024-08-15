@@ -5,7 +5,7 @@ AC_INIT([intcpt],[0.0.1],[handy-sun@foxmail.com])
 AM_INIT_AUTOMAKE([foreign 1.11 subdir-objects -Wall -Wno-portability])
 
 # AM_SUBDIR_OBJECTS = yes
-AC_CONFIG_SRCDIR([src/tracer.c])
+AC_CONFIG_SRCDIR([src/main.c])
 AC_CONFIG_HEADERS([config.h])
 AC_LANG([C])
 

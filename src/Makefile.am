@@ -1,3 +1,3 @@
 
 bin_PROGRAMS = intcpt
-intcpt_SOURCES = tracer.c
+intcpt_SOURCES = main.c
