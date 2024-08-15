@@ -19,6 +19,11 @@
 
 /* volatile sig_atomic_t g_sig_stat; */
 
+char g_proc_maps[512] = { 0 };
+char g_proc_exe[512] = { 0 };
+char g_abs_exe[512] = { 0 };
+
+
 typedef struct pack_total9
 {
     uint32_t key;
@@ -59,67 +64,41 @@ void handle_signal(int signal) {
 uint64_t get_base_addr(pid_t pid)
 {
     const int BUFSIZE = 1024;
-    char buf[1024] = { 0 };
-    char* pro_maps_path = buf;
 
-    // open /proc/pid/maps
-    pro_maps_path += sprintf(pro_maps_path, "%s", "/proc/");
-    pro_maps_path += sprintf(pro_maps_path, "%d", pid);
-    sprintf(pro_maps_path, "/%s", "maps");
-    FILE *fp = fopen(buf, "rb");
-    if (!fp)
-    {
+    if (snprintf(g_proc_maps, sizeof(g_proc_maps), "/proc/%d/maps", pid) <= 0) {
+        perror("get proc_maps");
+        return 0;
+    }
+
+    // read /proc/pid/exe
+    if (snprintf(g_proc_exe, sizeof(g_proc_exe), "/proc/%d/exe", pid) <= 0) {
+        perror("get proc_exe");
+        return 0;
+    }
+
+    FILE *fp = fopen(g_proc_maps, "rb");
+    if (!fp) {
         perror("open /proc/.. file err");
         exit(0);
     }
 
-    // read /proc/pid/exe
-    memset(buf, 0, BUFSIZE);
-    char* pro_exe_path = buf;
-    pro_exe_path += sprintf(pro_exe_path, "%s", "/proc");
-    pro_exe_path += sprintf(pro_exe_path, "/%d", pid);
-    sprintf(pro_exe_path, "/%s", "exe");
-    char target[100] = { 0 };
-    int target_len = readlink(buf, target, 100);
+    int target_len = readlink(g_proc_exe, g_abs_exe, 100);
     /* target[target_len] = 0; */
-    printf("proc exe: %s\n", target);
 
-    char cmd[1024] = { 0 };
-    snprintf(cmd, sizeof(cmd), "objdump -d -j .bss %s | grep -i pcmstate | awk '{print$1}'", target);
-    FILE *pfp = popen(cmd, "r");
-    if (pfp == NULL)
-    {
-        perror(cmd);
-        return 1;
-    }
-    char tempBuff[64]; // save to buf
-    if (fgets(tempBuff, 64, pfp) == NULL)
-    {
-        perror("fgets");
-        pclose(pfp);
-        return 1;
-    }
-    pclose(pfp);
-    uint64_t offset_addr;
-    sscanf(tempBuff, "%lx", &offset_addr);
-    printf("offset_addr: %#lx\n", offset_addr);
-
-    memset(buf, 0, BUFSIZE);
+    char buf[1024] = { 0 };
     char* pro_addr = buf;
     char* pro_maps = buf + 100;
     char* pro_name = pro_maps + 100;
     char* p = pro_name + 256;
 
     char data[512] = { 0 };
-    while (!feof(fp))
-    {
-        if (fgets(data, sizeof(data), fp) == NULL)
+    while (!feof(fp)) {
+        if (fgets(data, sizeof(data), fp) == NULL) {
             return 0;
+        }
 
         sscanf(data, "%[^ ] %[^ ] %[^ ] %[^ ] %[^ ] %[^ ]", pro_addr, p, pro_maps, p, p, pro_name);
-        // printf("pro_addr %s pro_maps %s pro_name %s --> %d %d\n",pro_addr,pro_maps,pro_name,memcmp(pro_name,target,target_len-1),memcmp(pro_maps,"00000000",8));
-        if (memcmp(pro_name, target, target_len - 1) == 0 && memcmp(pro_maps, "00000000", 8) == 0)
-        {
+        if (memcmp(pro_name, g_abs_exe, target_len - 1) == 0 && memcmp(pro_maps, "00000000", 8) == 0) {
             fclose(fp);
             memset(p, 0, 10);
             sscanf(pro_addr, "%[^-]", p);
@@ -139,28 +118,48 @@ uint64_t get_base_addr(pid_t pid)
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        fprintf(stderr, "Target pid or addr of process not input\n");
+        fprintf(stderr, "Target pid or keyword of process not input\n");
         return 1;
     }
 
     signal(SIGINT, handle_signal);
 
     /* fprintf(stdout, "sighandler: %d, my pid: %d\n", g_sig_stat, getpid()); */
-    fprintf(stdout, "my pid: %d\n", getpid());
     char *end_ptr = NULL;
     pid_t pid = (pid_t)strtol(argv[1], &end_ptr, 10);
-
     if (0 == pid) {
         perror("strtol failed");
         fprintf(stderr, "target pid is illegal\n");
         return 1;
     }
 
+    fprintf(stdout, "traced pid: %d\n", pid);
+
+    uint64_t base_addr = get_base_addr(pid);
+    fprintf(stdout, "base addr: %#lx\n", base_addr);
+
+    char cmd[512] = { 0 };
+    snprintf(cmd, sizeof(cmd), "readelf -s %s -W | grep -i %s | awk '{print$2\" \" $3}'", g_abs_exe, argv[2]);
+    FILE *pfp = popen(cmd, "r");
+    if (pfp == NULL) {
+        perror(cmd);
+        return 1;
+    }
+    char tempBuff[256] = { 0 }; // save to buf
+    if (fgets(tempBuff, sizeof(tempBuff), pfp) == NULL) {
+        perror("fgets");
+        pclose(pfp);
+        return 1;
+    }
+    pclose(pfp);
+
+    uint64_t offset_addr;
+    uint32_t var_size;
+    sscanf(tempBuff, "%lx %x", &offset_addr, &var_size);
+    printf("offset_addr: %016lx %x\n", offset_addr, var_size);
+
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
-
-    uint64_t base = get_base_addr(pid);
-    fprintf(stdout, "base addr: %#lx\n", base);
 
     long intercept = ptrace(PTRACE_ATTACH, pid, NULL, NULL);
     if (0 != intercept) {
@@ -174,7 +173,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    uint64_t addr = strtoull(argv[2], &end_ptr, 10);
+    /* uint64_t addr = strtoull(argv[2], & nd_ptr, 10); */
+    uint64_t addr = base_addr + offset_addr;
+    printf("addr: %lu\n", addr);
     long peek_arr[9] = {};
     int i = 0;
     for (; i < sizeof(peek_arr) / sizeof(peek_arr[0]); ++i) {

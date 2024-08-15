@@ -55,7 +55,7 @@ dkms.conf
 *Makefile
 *Makefile.in
 aclocal.m4
-autom4te.cache*
+autom4te.cache/
 compile
 config.h
 config.h.in
@@ -66,6 +66,6 @@ configure~
 depcomp
 install-sh
 missing
-.*
+.deps/
 stamp-h1
 src/intcpt
