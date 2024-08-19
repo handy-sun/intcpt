@@ -1,5 +1,6 @@
 /* #define _POSIX_C_SOURCE 199309L */
 
+#include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,18 +36,6 @@ char g_proc_exe[NAME_MAX + 16];
 /* readlink -f /proc/<pid>/exe */
 char g_exe_link[NAME_MAX];
 
-#pragma pack(push)
-#pragma pack(1)
-typedef struct pack_total9 {
-    uint32_t key;
-    uint8_t  u8_1;
-    uint8_t  u8_2;
-    uint8_t  u8_3;
-    uint8_t  u8_4;
-    uint8_t  u8_5;
-} PackTot;
-#pragma pack(pop)
-
 const char *get_tm_timeval() {
     static char s_time_chs[84];
     memset(s_time_chs, 0, sizeof(s_time_chs));
@@ -56,6 +45,52 @@ const char *get_tm_timeval() {
     snprintf(s_time_chs, sizeof(s_time_chs) - 1, "%02d%02d %02d:%02d:%02d.%06ld",
         t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv_cur.tv_usec);
     return s_time_chs;
+}
+
+/* printf for hex value 16 bytes per line */
+int print_hex_with_ascii(const uint8_t *uch, size_t len) {
+    static const int lineByteCount = 16;
+    static const char *hexChs = "0123456789abcdef";
+
+    int lineCount = (len - 1) / lineByteCount + 1;
+    int hexPartLen = 5 * lineByteCount / 2 + 1;
+    int asciiLen = lineByteCount + 1;
+    int lineLength = hexPartLen + asciiLen;
+    size_t contentSize = lineCount * lineLength + 1;
+
+    char *out = (char *)calloc(contentSize, sizeof(char));
+    int idx = 0;
+    int asciiIdx = hexPartLen;
+    size_t i = 0;
+    for (; i < len; ++i) {
+        out[idx++] = hexChs[(uch[i] >> 4) & 0x0f];
+        out[idx++] = hexChs[uch[i] & 0x0f];
+        out[asciiIdx++] = isprint(uch[i]) ? (char)uch[i] : '.';
+
+        unsigned int col = i + 1;
+        if (0 == col % 2) {
+            out[idx++] = ' ';
+            if (0 == col % lineByteCount) {
+                out[idx++] = ' ';
+                out[asciiIdx++] = '\n';
+                asciiIdx += hexPartLen;
+                idx += asciiLen;
+            }
+        }
+    }
+
+    /* OUT_VAR(contentSize, lu); */
+    size_t curLen = strlen(out);
+    /* OUT_VAR(curLen, lu); */
+    /* printf("\n"); */
+    if (contentSize <= curLen) {
+        SAFE_FREE(out);
+        return 0;
+    }
+    out[curLen] = '\n';
+    printf("hex value of variable:\n%s", out);
+    SAFE_FREE(out);
+    return curLen + 1;
 }
 
 int wait4stop(pid_t pid) {
@@ -166,8 +201,6 @@ _Bool get_var_addr_size(const char *var_name, uint64_t *p_addr, uint32_t *p_size
 
         /* if (memcmp(type, "OBJECT", 6) == 0 && memcmp(bind, "GLOBAL", 6) == 0) { */
         if (strcmp(type, "OBJECT") == 0 && strcmp(bind, "GLOBAL") == 0) {
-            OUT_VAR(name, s);
-            printf("\n");
             break;
         } else {
             OUT_VAR(type, s);OUT_VAR(bind, s);
@@ -265,13 +298,7 @@ int main(int argc, char *argv[]) {
     fprintf(stdout, "end: [%s]\n", get_tm_timeval() + 5);
     fprintf(stdout, "trace total elapsed: %02lds %010.3fus,\n", end.tv_sec - start.tv_sec, elapsed);
 
-    const uint8_t *buf = (uint8_t *)peek_arr;
-    int off = 0;
-    for (; off + sizeof(PackTot) <= sz; off += sizeof(PackTot)) {
-        PackTot pt = *(PackTot *)(buf + off);
-        fprintf(stdout, "key: %4u, [ %3u, %3u, %3u, %3u, %3u ]\n",
-                pt.key, pt.u8_1, pt.u8_2, pt.u8_3, pt.u8_4, pt.u8_5);
-    }
+    print_hex_with_ascii(peek_arr, sz);
     SAFE_FREE(peek_arr);
 
     return 0;
